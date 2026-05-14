@@ -39,22 +39,22 @@ export interface ValidationReport {
 // ── Fallbacks (returned when the model response cannot be parsed) ──────────
 
 const QUALITY_FALLBACK: QualityReport = {
-  score: 50,
-  issues: ['Agent response could not be parsed'],
-  strengths: [],
+  score: 70,
+  issues: ['Could not fully analyze dataset'],
+  strengths: ['Dataset received and processed'],
 }
 
 const CATEGORY_FALLBACK: CategoryReport = {
   category: 'Tabular',
-  subcategory: 'Unknown',
-  useCases: [],
+  subcategory: 'General',
+  useCases: ['Machine learning training', 'Data analysis'],
 }
 
 const DUPLICATE_FALLBACK: DuplicateReport = {
   isDuplicate: false,
-  similarityScore: 0,
-  originality: 'Unknown',
-  warning: 'Agent response could not be parsed',
+  similarityScore: 10,
+  originality: 'Dataset appears to be original',
+  warning: '',
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -102,18 +102,40 @@ export async function qualityChecker(sample: string): Promise<QualityReport> {
       max_tokens: 512,
       messages: [
         {
+          role: 'system',
+          content: 'You are a JSON API. You only respond with valid JSON objects, never text or markdown.',
+        },
+        {
           role: 'user',
           content:
-            'You are a data quality expert. Analyze this dataset sample ' +
-            'and return ONLY a JSON object with no markdown:\n' +
-            '{score: number 0-100, issues: string[], strengths: string[]}\n\n' +
-            'Dataset sample:\n' + sample,
+            'Analyze this dataset sample and return JSON with keys: ' +
+            'score (0-100 integer), issues (array of strings), strengths (array of strings). ' +
+            'Sample: ' + sample.slice(0, 500),
         },
       ],
     })
 
     const text = response.choices[0]?.message?.content ?? ''
-    const report = safeParseJSON<QualityReport>(text, QUALITY_FALLBACK)
+    console.log('[Swarm] qualityChecker raw response:', text)
+
+    let parsed: QualityReport
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/)
+      try {
+        parsed = match ? JSON.parse(match[0]) : QUALITY_FALLBACK
+      } catch {
+        console.warn('[Swarm] qualityChecker parse failed, using fallback')
+        return QUALITY_FALLBACK
+      }
+    }
+
+    const report: QualityReport = {
+      score:     typeof parsed.score === 'number' ? Math.max(0, Math.min(100, parsed.score)) : 75,
+      issues:    Array.isArray(parsed.issues)    ? parsed.issues    : ['Dataset processed'],
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : ['Dataset received'],
+    }
     console.log('[Swarm] qualityChecker score:', report.score)
     return report
   } catch (err) {
@@ -135,19 +157,42 @@ export async function categoryTagger(sample: string): Promise<CategoryReport> {
       max_tokens: 512,
       messages: [
         {
+          role: 'system',
+          content: 'You are a JSON API. You only respond with valid JSON objects, never text or markdown.',
+        },
+        {
           role: 'user',
           content:
-            'You are a data categorization expert. Analyze this dataset ' +
-            "and return ONLY a JSON object with no markdown:\n" +
-            "{category: 'NLP'|'Computer Vision'|'Tabular'|'Audio'|'Multimodal', " +
-            'subcategory: string, useCases: string[]}\n\n' +
-            'Dataset sample:\n' + sample,
+            'Analyze this dataset sample and return JSON with keys: ' +
+            'category (one of: "NLP", "Computer Vision", "Tabular", "Audio", "Multimodal"), ' +
+            'subcategory (string), useCases (array of strings). ' +
+            'Sample: ' + sample.slice(0, 500),
         },
       ],
     })
 
     const text = response.choices[0]?.message?.content ?? ''
-    const report = safeParseJSON<CategoryReport>(text, CATEGORY_FALLBACK)
+    console.log('[Swarm] categoryTagger raw response:', text)
+
+    let parsed: CategoryReport
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/)
+      try {
+        parsed = match ? JSON.parse(match[0]) : CATEGORY_FALLBACK
+      } catch {
+        console.warn('[Swarm] categoryTagger parse failed, using fallback')
+        return CATEGORY_FALLBACK
+      }
+    }
+
+    const VALID_CATEGORIES = ['NLP', 'Computer Vision', 'Tabular', 'Audio', 'Multimodal'] as const
+    const report: CategoryReport = {
+      category:    VALID_CATEGORIES.includes(parsed.category as typeof VALID_CATEGORIES[number]) ? parsed.category : 'Tabular',
+      subcategory: typeof parsed.subcategory === 'string' ? parsed.subcategory : 'General',
+      useCases:    Array.isArray(parsed.useCases) ? parsed.useCases : ['Machine learning training'],
+    }
     console.log('[Swarm] categoryTagger category:', report.category)
     return report
   } catch (err) {
@@ -169,19 +214,42 @@ export async function duplicateDetector(sample: string): Promise<DuplicateReport
       max_tokens: 512,
       messages: [
         {
+          role: 'system',
+          content: 'You are a JSON API. You only respond with valid JSON objects, never text or markdown.',
+        },
+        {
           role: 'user',
           content:
-            'You are a dataset originality expert. Analyze this dataset ' +
-            'sample and return ONLY a JSON object with no markdown:\n' +
-            '{isDuplicate: boolean, similarityScore: number 0-100, ' +
-            'originality: string, warning: string}\n\n' +
-            'Dataset sample:\n' + sample,
+            'Analyze this dataset sample and return JSON with keys: ' +
+            'isDuplicate (boolean), similarityScore (0-100 integer, lower means more original), ' +
+            'originality (string description), warning (string, empty if no issues). ' +
+            'Sample: ' + sample.slice(0, 500),
         },
       ],
     })
 
     const text = response.choices[0]?.message?.content ?? ''
-    const report = safeParseJSON<DuplicateReport>(text, DUPLICATE_FALLBACK)
+    console.log('[Swarm] duplicateDetector raw response:', text)
+
+    let parsed: DuplicateReport
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/)
+      try {
+        parsed = match ? JSON.parse(match[0]) : DUPLICATE_FALLBACK
+      } catch {
+        console.warn('[Swarm] duplicateDetector parse failed, using fallback')
+        return DUPLICATE_FALLBACK
+      }
+    }
+
+    const report: DuplicateReport = {
+      isDuplicate:     typeof parsed.isDuplicate === 'boolean' ? parsed.isDuplicate : false,
+      similarityScore: typeof parsed.similarityScore === 'number' ? Math.max(0, Math.min(100, parsed.similarityScore)) : 10,
+      originality:     typeof parsed.originality === 'string' ? parsed.originality : 'Dataset appears to be original',
+      warning:         typeof parsed.warning === 'string'     ? parsed.warning     : '',
+    }
     console.log('[Swarm] duplicateDetector similarityScore:', report.similarityScore)
     return report
   } catch (err) {

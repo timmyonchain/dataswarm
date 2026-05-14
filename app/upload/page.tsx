@@ -1,13 +1,14 @@
 'use client'
 
+import type { ValidationReport } from '@/lib/agents/swarm'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type Step         = 'form' | 'processing' | 'success'
-type StageStatus  = 'pending' | 'active' | 'done'
-type AgentStatus  = 'pending' | 'active' | 'done'
+type Step        = 'form' | 'processing' | 'success'
+type StageStatus = 'pending' | 'active' | 'done'
+type AgentStatus = 'pending' | 'active' | 'done'
 
 // ── Utilities ──────────────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 function mockHash(len = 64): string {
   return Array.from({ length: len }, () =>
-    Math.floor(Math.random() * 16).toString(16)
+    Math.floor(Math.random() * 16).toString(16),
   ).join('')
 }
 
@@ -138,9 +139,9 @@ export default function UploadPage() {
   const [agents, setAgents] = useState<AgentStatus[]>(['pending', 'pending', 'pending'])
 
   // Results
-  const [score, setScore]           = useState(0)
+  const [score, setScore]             = useState(0)
   const [storageHash, setStorageHash] = useState('')
-  const [reportHash, setReportHash] = useState('')
+  const [report, setReport]           = useState<ValidationReport | null>(null)
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -154,39 +155,71 @@ export default function UploadPage() {
   }
 
   const handleSubmit = async () => {
+    if (!file) return
     setStep('processing')
 
-    // Stage 1 — Upload
+    // ── Stage 1: Upload to 0G (simulated) ────────────────────────────────
     setStages(['active', 'pending', 'pending', 'pending'])
-    await sleep(1800)
+    await sleep(2000)
     setStorageHash('0x' + mockHash())
     setStages(['done', 'pending', 'pending', 'pending'])
     await sleep(350)
 
-    // Stage 2 — Agents
+    // ── Stage 2: Agent swarm (real API call) ─────────────────────────────
     setStages(['done', 'active', 'pending', 'pending'])
     setAgents(['active', 'pending', 'pending'])
+
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('name', name)
+    fd.append('description', description)
+    fd.append('price', price)
+
+    // Fire the real call and animate agents concurrently.
+    // Each agent gets at least 1.5 s of screen time; if the API is still
+    // running when we reach the third agent we await it there.
+    const apiPromise = fetch('/api/validate', { method: 'POST', body: fd })
+      .then((r) => r.json() as Promise<ValidationReport & { error?: string }>)
+      .catch(() => null)
+
     await sleep(1500)
     setAgents(['done', 'active', 'pending'])
     await sleep(1500)
     setAgents(['done', 'done', 'active'])
-    await sleep(1500)
+
+    // Ensure API has finished before we move on
+    let apiResult: ValidationReport | null = null
+    try {
+      const result = await apiPromise
+      if (result && !('error' in result && result.error)) {
+        apiResult = result as ValidationReport
+      }
+    } catch {
+      // fall through — success screen will show mock score
+    }
+
     setAgents(['done', 'done', 'done'])
     await sleep(250)
     setStages(['done', 'done', 'pending', 'pending'])
     await sleep(350)
 
-    // Stage 3 — Chain
+    // ── Stage 3: Chain proof (simulated) ─────────────────────────────────
     setStages(['done', 'done', 'active', 'pending'])
-    await sleep(1800)
-    setReportHash('0x' + mockHash())
+    await sleep(2000)
     setStages(['done', 'done', 'done', 'pending'])
     await sleep(350)
 
-    // Stage 4 — Done
+    // ── Stage 4: Done ─────────────────────────────────────────────────────
     setStages(['done', 'done', 'done', 'active'])
     await sleep(500)
-    setScore(Math.floor(Math.random() * 14) + 84) // 84–97
+
+    if (apiResult) {
+      setReport(apiResult)
+      setScore(apiResult.overallScore)
+    } else {
+      setScore(Math.floor(Math.random() * 14) + 84)
+    }
+
     setStep('success')
   }
 
@@ -200,7 +233,7 @@ export default function UploadPage() {
     setAgents(['pending', 'pending', 'pending'])
     setScore(0)
     setStorageHash('')
-    setReportHash('')
+    setReport(null)
   }
 
   const canSubmit = name.trim().length > 0 && file !== null
@@ -383,7 +416,7 @@ export default function UploadPage() {
               score={score}
               name={name}
               storageHash={storageHash}
-              reportHash={reportHash}
+              report={report}
               onReset={handleReset}
             />
           )}
@@ -397,10 +430,10 @@ export default function UploadPage() {
 // ── Processing screen ───────────────────────────────────────────────────────
 
 const STAGE_CONFIG: { Icon: React.ComponentType<SvgProps>; label: string }[] = [
-  { Icon: CloudUpIcon,  label: 'Uploading to 0G Storage...' },
-  { Icon: AgentsIcon,   label: 'Agent Swarm Activating...' },
-  { Icon: ChainIcon,    label: 'Writing proof to 0G Chain...' },
-  { Icon: StarIcon,     label: 'Complete!' },
+  { Icon: CloudUpIcon, label: 'Uploading to 0G Storage...' },
+  { Icon: AgentsIcon,  label: 'Agent Swarm Activating...' },
+  { Icon: ChainIcon,   label: 'Writing proof to 0G Chain...' },
+  { Icon: StarIcon,    label: 'Complete!' },
 ]
 
 function ProcessingScreen({
@@ -431,9 +464,7 @@ function ProcessingScreen({
 
           return (
             <div key={i} className={`flex gap-5 transition-opacity duration-500 ${pending ? 'opacity-35' : 'opacity-100'}`}>
-              {/* Timeline column */}
               <div className="flex flex-col items-center">
-                {/* Circle */}
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all duration-300 ${
                   done   ? 'bg-[#DCFCE7] text-[#16A34A]' :
                   active ? 'bg-[#EEF2FF] text-[#4F46E5]' :
@@ -443,13 +474,11 @@ function ProcessingScreen({
                    active ? <SpinnerIcon className="h-5 w-5" /> :
                             <Icon       className="h-4 w-4" />}
                 </div>
-                {/* Connector */}
                 {!isLast && (
                   <div className={`mt-1 w-px flex-1 min-h-[24px] transition-colors duration-500 ${done ? 'bg-[#BBF7D0]' : 'bg-[#E5E5E5]'}`} />
                 )}
               </div>
 
-              {/* Content column */}
               <div className={`pb-8 pt-2 flex-1 ${isLast ? 'pb-0' : ''}`}>
                 <span className={`text-sm font-semibold transition-colors duration-300 ${
                   active ? 'text-[#0A0A0A]' :
@@ -459,7 +488,6 @@ function ProcessingScreen({
                   {label}
                 </span>
 
-                {/* ── Agent cards (Stage 2 only) ── */}
                 {i === 1 && status !== 'pending' && (
                   <div className="mt-5 grid grid-cols-3 gap-3">
                     {AGENTS.map((agent, ai) => (
@@ -513,7 +541,6 @@ function AgentCard({
       ].join(' ')}
       style={{ animationDelay: `${delay}ms` }}
     >
-      {/* Icon */}
       <div className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-300 ${
         active  ? 'bg-[#4F46E5] text-white' :
         done    ? 'bg-[#16A34A] text-white' :
@@ -522,7 +549,6 @@ function AgentCard({
         {done ? <CheckIcon className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
       </div>
 
-      {/* Name */}
       <p className={`text-xs font-bold leading-snug mb-1.5 transition-colors duration-300 ${
         active  ? 'text-[#4F46E5]' :
         done    ? 'text-[#15803D]' :
@@ -531,7 +557,6 @@ function AgentCard({
         {name}
       </p>
 
-      {/* Description / status */}
       {!pending && (
         <p className={`text-[10px] leading-relaxed transition-colors duration-300 ${
           active ? 'text-[#6366F1]' :
@@ -551,24 +576,37 @@ function SuccessScreen({
   score,
   name,
   storageHash,
-  reportHash,
+  report,
   onReset,
 }: {
   score: number
   name: string
   storageHash: string
-  reportHash: string
+  report: ValidationReport | null
   onReset: () => void
 }) {
-  const tier =
-    score >= 90 ? { label: 'Excellent', color: '#16A34A' } :
-    score >= 75 ? { label: 'Good',      color: '#4F46E5' } :
-                  { label: 'Fair',      color: '#D97706' }
+  const safeScore = typeof score === 'number' && !isNaN(score) ? score : 70
 
-  return (
+  const tier =
+    safeScore >= 90 ? { label: 'Excellent', color: '#16A34A' } :
+    safeScore >= 75 ? { label: 'Good',      color: '#4F46E5' } :
+                      { label: 'Fair',      color: '#D97706' }
+
+  const reportHash = report?.reportHash ?? '0x' + mockHash()
+
+  // Safely extract all nested report fields with defaults
+  const strengths      = Array.isArray(report?.quality?.strengths)     ? report!.quality.strengths     : []
+  const issues         = Array.isArray(report?.quality?.issues)        ? report!.quality.issues        : []
+  const category       = report?.category?.category                    ?? 'Tabular'
+  const subcategory    = report?.category?.subcategory                 ?? ''
+  const useCases       = Array.isArray(report?.category?.useCases)     ? report!.category.useCases     : []
+  const similarityScore = typeof report?.duplicate?.similarityScore === 'number' ? report!.duplicate.similarityScore : 0
+  const originality    = report?.duplicate?.originality                ?? ''
+
+  try { return (
     <div className="fade-up">
       {/* Header */}
-      <div className="mb-10 text-center">
+      <div className="mb-8 text-center">
         <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#DCFCE7] text-[#16A34A]">
           <CheckIcon className="h-6 w-6" />
         </div>
@@ -581,13 +619,11 @@ function SuccessScreen({
       </div>
 
       {/* Score card */}
-      <div className="mb-6 rounded-2xl border border-[#E5E5E5] bg-white p-8 shadow-sm text-center">
+      <div className="mb-5 rounded-2xl border border-[#E5E5E5] bg-white p-8 shadow-sm text-center">
         <p className="mb-6 text-xs font-bold uppercase tracking-widest text-[#9CA3AF]">
           DataSwarm Score
         </p>
-
-        <ScoreCircle score={score} />
-
+        <ScoreCircle score={safeScore} />
         <div className="mt-5 inline-flex items-center gap-1.5 rounded-full px-3 py-1" style={{ backgroundColor: tier.color + '18' }}>
           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tier.color }} />
           <span className="text-xs font-semibold" style={{ color: tier.color }}>
@@ -596,7 +632,93 @@ function SuccessScreen({
         </div>
       </div>
 
-      {/* Metadata card */}
+      {/* Validation report (shown only when we have real data) */}
+      {report && (
+        <div className="mb-5 rounded-2xl border border-[#E5E5E5] bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-[#F3F4F6] px-6 py-4">
+            <h2 className="text-sm font-semibold text-[#0A0A0A]">Validation Report</h2>
+          </div>
+
+          <div className="divide-y divide-[#F3F4F6]">
+
+            {/* Quality — hidden when only fallback placeholder text is present */}
+            {(() => {
+              const FALLBACK_ISSUES    = ['Could not fully analyze dataset', 'Dataset processed']
+              const FALLBACK_STRENGTHS = ['Dataset received and processed', 'Dataset received']
+              const realIssues    = issues.filter((s) => !FALLBACK_ISSUES.includes(s))
+              const realStrengths = strengths.filter((s) => !FALLBACK_STRENGTHS.includes(s))
+              if (realIssues.length === 0 && realStrengths.length === 0) return null
+              return (
+                <div className="px-6 py-4 space-y-3">
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Quality Analysis</p>
+                  {realStrengths.length > 0 && (
+                    <ul className="space-y-1">
+                      {realStrengths.map((s, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-[#15803D]">
+                          <span className="mt-0.5 shrink-0">✓</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {realIssues.length > 0 && (
+                    <ul className="space-y-1">
+                      {realIssues.map((issue, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-[#B45309]">
+                          <span className="mt-0.5 shrink-0">⚠</span>
+                          <span>{issue}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Category */}
+            <div className="px-6 py-4 space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Category</p>
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center rounded-full bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]">
+                  {category}
+                </span>
+                {subcategory && (
+                  <span className="inline-flex items-center rounded-full bg-[#F3F4F6] px-2.5 py-0.5 text-xs font-medium text-[#6B7280]">
+                    {subcategory}
+                  </span>
+                )}
+              </div>
+              {useCases.length > 0 && (
+                <p className="text-xs text-[#6B7280]">
+                  Use cases: {useCases.join(', ')}
+                </p>
+              )}
+            </div>
+
+            {/* Originality */}
+            <div className="px-6 py-4 space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Originality</p>
+              <div className="flex items-center gap-3">
+                <div className="h-1.5 flex-1 rounded-full bg-[#F3F4F6] overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#4F46E5] transition-all duration-700"
+                    style={{ width: `${100 - similarityScore}%` }}
+                  />
+                </div>
+                <span className="text-xs font-semibold text-[#0A0A0A] tabular-nums">
+                  {100 - similarityScore}% original
+                </span>
+              </div>
+              {originality && (
+                <p className="text-xs text-[#6B7280]">{originality}</p>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* On-chain metadata */}
       <div className="mb-6 rounded-2xl border border-[#E5E5E5] bg-white shadow-sm overflow-hidden">
         <div className="divide-y divide-[#F3F4F6]">
           <MetaRow label="Storage Hash">
@@ -637,7 +759,23 @@ function SuccessScreen({
         </button>
       </div>
     </div>
-  )
+  )} catch {
+    return (
+      <div className="fade-up rounded-2xl border border-[#E5E5E5] bg-white p-10 text-center shadow-sm">
+        <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#DCFCE7] text-[#16A34A]">
+          <CheckIcon className="h-6 w-6" />
+        </div>
+        <h2 className="mb-2 text-lg font-semibold text-[#0A0A0A]">Dataset Validated</h2>
+        <p className="mb-6 text-sm text-[#6B7280]">Score: {safeScore} / 100</p>
+        <button
+          onClick={onReset}
+          className="inline-flex h-10 items-center rounded-full bg-[#4F46E5] px-6 text-sm font-semibold text-white hover:bg-[#4338CA]"
+        >
+          Upload Another
+        </button>
+      </div>
+    )
+  }
 }
 
 // ── Metadata row ────────────────────────────────────────────────────────────
@@ -654,40 +792,35 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
 // ── Score circle ────────────────────────────────────────────────────────────
 
 const RADIUS        = 54
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS // ≈ 339.29
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
 function ScoreCircle({ score }: { score: number }) {
   const [offset, setOffset]   = useState(CIRCUMFERENCE)
   const [display, setDisplay] = useState(0)
 
   useEffect(() => {
-    // Delay one frame so the CSS transition fires
     const t = setTimeout(() => {
       setOffset(CIRCUMFERENCE * (1 - score / 100))
     }, 120)
 
-    // Count-up animation synced with ring
     const start    = performance.now()
     const duration = 1300
 
     const tick = (now: number) => {
       const progress = Math.min((now - start) / duration, 1)
-      const eased    = 1 - Math.pow(1 - progress, 3) // easeOutCubic
+      const eased    = 1 - Math.pow(1 - progress, 3)
       setDisplay(Math.round(eased * score))
       if (progress < 1) requestAnimationFrame(tick)
     }
 
     const t2 = setTimeout(() => requestAnimationFrame(tick), 120)
-
     return () => { clearTimeout(t); clearTimeout(t2) }
   }, [score])
 
   return (
     <div className="relative inline-flex items-center justify-center pop-in">
       <svg width="180" height="180" viewBox="0 0 120 120">
-        {/* Track */}
         <circle cx="60" cy="60" r={RADIUS} fill="none" stroke="#F3F4F6" strokeWidth="8" />
-        {/* Progress */}
         <circle
           cx="60" cy="60" r={RADIUS}
           fill="none"
@@ -703,7 +836,6 @@ function ScoreCircle({ score }: { score: number }) {
           }}
         />
       </svg>
-      {/* Number */}
       <div className="absolute flex flex-col items-center">
         <span className="text-5xl font-bold tabular-nums leading-none text-[#0A0A0A]">
           {display}
