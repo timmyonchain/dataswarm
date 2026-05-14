@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm run *)",
       "Bash(npx tsc *)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\loyal\\\\dataswarm\" -Recurse -Depth 2 -Exclude \".next\", \"node_modules\" | Where-Object { $_.Extension -match \"\\\\.\\(tsx|ts|css|json|svg|mjs\\)$\" } | ForEach-Object { \\($_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\loyal\\\\dataswarm\"\\), \".\"\\).replace\\(\"\\\\\", \"/\"\\) } | Sort-Object)"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\loyal\\\\dataswarm\" -Recurse -Depth 2 -Exclude \".next\", \"node_modules\" | Where-Object { $_.Extension -match \"\\\\.\\(tsx|ts|css|json|svg|mjs\\)$\" } | ForEach-Object { \\($_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\loyal\\\\dataswarm\"\\), \".\"\\).replace\\(\"\\\\\", \"/\"\\) } | Sort-Object)",
+      "Bash(npm install *)",
+      "Bash(node -e \"console.log\\(require\\('/c/Users/loyal/dataswarm/node_modules/ethers/package.json'\\).version\\)\")"
     ]
   }
 }

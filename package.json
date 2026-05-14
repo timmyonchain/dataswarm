@@ -13,9 +13,11 @@
     "test:contracts": "hardhat test"
   },
   "dependencies": {
+    "@0glabs/0g-ts-sdk": "^0.3.3",
     "@rainbow-me/rainbowkit": "^2.1.7",
     "@supabase/supabase-js": "^2.105.4",
     "@tanstack/react-query": "^5.56.2",
+    "ethers": "^6.13.1",
     "groq-sdk": "^1.2.0",
     "next": "16.2.6",
     "react": "19.2.4",
