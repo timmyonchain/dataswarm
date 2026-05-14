@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+
+export const revalidate = 0
 import type { DatasetRow } from '@/lib/supabase'
 
 // ── Icons ──────────────────────────────────────────────────────────────────

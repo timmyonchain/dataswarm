@@ -29,6 +29,7 @@ interface DatasetDetail {
   storageHash: string
   reportHash:  string
   txHash?:     string
+  onchainId?:  number
   isLive?:     boolean
   validation: {
     quality:   { score: number; issues: string[]; strengths: string[] }
@@ -228,6 +229,7 @@ function rowToDetail(row: DatasetRow): DatasetDetail {
     storageHash: row.storage_hash ?? '',
     reportHash:  row.report_hash ?? '',
     txHash:      row.tx_hash || undefined,
+    onchainId:   row.onchain_id ?? undefined,
     isLive:      true,
     validation: {
       quality: {
@@ -288,7 +290,8 @@ export default function DatasetPage() {
   const { writeContractAsync } = useWriteContract()
 
   const isLive        = dataset?.isLive ?? false
-  const datasetIdBig  = BigInt(dataset?.id ?? 0)
+  // Use the on-chain contract ID (captured during upload) — not the Supabase row ID
+  const datasetIdBig  = BigInt(dataset?.onchainId ?? dataset?.id ?? 0)
   const userAddr      = address ?? ZERO_ADDR
 
   const { data: canAccess } = useReadContract({

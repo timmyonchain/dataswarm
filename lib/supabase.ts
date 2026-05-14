@@ -13,8 +13,12 @@
     tx_hash             TEXT,
     contributor_address TEXT,
     validation_report   JSONB,
+    onchain_id          INTEGER,
     created_at          TIMESTAMPTZ DEFAULT NOW()
   );
+
+  -- Run this to add the column to an existing table:
+  -- ALTER TABLE datasets ADD COLUMN IF NOT EXISTS onchain_id INTEGER;
 
   -- Allow anonymous reads (marketplace / dataset pages)
   ALTER TABLE datasets ENABLE ROW LEVEL SECURITY;
@@ -48,6 +52,7 @@ export interface DatasetInsert {
   category:            string
   tx_hash:             string
   contributor_address: string
+  onchain_id?:         number
   validation_report?:  ValidationReport
 }
 

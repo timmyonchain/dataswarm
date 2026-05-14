@@ -4,7 +4,7 @@ import type { ValidationReport } from '@/lib/agents/swarm'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useWriteContract, useConfig, useAccount } from 'wagmi'
-import { waitForTransactionReceipt } from 'wagmi/actions'
+import { simulateContract, waitForTransactionReceipt } from 'wagmi/actions'
 import { parseEther } from 'viem'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '@/lib/contract'
 import { saveDataset } from '@/lib/supabase'
@@ -221,19 +221,26 @@ export default function UploadPage() {
     setStages(['done', 'done', 'active', 'pending'])
     setWalletMessage('Sign the transaction in your wallet...')
 
-    let localTxHash = ''
+    let localTxHash    = ''
+    let localOnchainId: number | null = null
     try {
       const metadataURI = JSON.stringify({ name, description, timestamp: Date.now() })
       const priceWei    = parseEther(price && !isNaN(Number(price)) ? price : '0')
 
-      const hash = await writeContractAsync({
+      // Simulate first — captures the uint256 ID the contract will return
+      const { request, result } = await simulateContract(config, {
         address:      CONTRACT_ADDRESS,
         abi:          CONTRACT_ABI,
         functionName: 'listDataset',
         args:         [localStorageHash, priceWei, metadataURI],
+        account:      address,
       })
 
-      localTxHash = hash
+      const hash = await writeContractAsync(request)
+      localTxHash    = hash
+      localOnchainId = typeof result === 'bigint' ? Number(result) : null
+      console.log('[Upload] On-chain dataset ID:', localOnchainId)
+
       setTxHash(hash)
       setWalletMessage('Waiting for confirmation...')
       await waitForTransactionReceipt(config, { hash })
@@ -270,6 +277,7 @@ export default function UploadPage() {
       category:            apiResult?.category?.category ?? 'Tabular',
       tx_hash:             localTxHash,
       contributor_address: address ?? '',
+      onchain_id:          localOnchainId ?? undefined,
       validation_report:   apiResult ?? undefined,
     }
     console.log('[Upload] Saving to Supabase...', dataToSave)
