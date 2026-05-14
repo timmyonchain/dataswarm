@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import type { DatasetRow } from '@/lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +22,7 @@ interface DatasetDetail {
   listedAt:    string
   storageHash: string
   reportHash:  string
+  txHash?:     string
   validation: {
     quality:   { score: number; issues: string[]; strengths: string[] }
     category:  { subcategory: string; useCases: string[] }
@@ -188,6 +191,55 @@ const DATASETS: DatasetDetail[] = [
   },
 ]
 
+// ── Supabase → DatasetDetail ────────────────────────────────────────────────
+
+const VALID_CATEGORIES: Category[] = ['NLP', 'Computer Vision', 'Tabular', 'Audio', 'Multimodal']
+
+function rowToDetail(row: DatasetRow): DatasetDetail {
+  const vr = row.validation_report as {
+    quality?:   { score?: number; issues?: string[]; strengths?: string[] }
+    category?:  { subcategory?: string; useCases?: string[] }
+    duplicate?: { similarityScore?: number; originality?: string; warning?: string }
+  } | null
+
+  const cat = VALID_CATEGORIES.includes(row.category as Category)
+    ? (row.category as Category)
+    : 'Tabular'
+
+  return {
+    id:          row.id,
+    name:        row.name,
+    category:    cat,
+    score:       row.validation_score ?? 0,
+    price:       row.price ?? '0',
+    purchases:   0,
+    contributor: row.contributor_address ?? 'Unknown',
+    description: row.description ?? '',
+    listedAt:    new Date(row.created_at).toLocaleDateString('en-US', {
+                   month: 'short', day: 'numeric', year: 'numeric',
+                 }),
+    storageHash: row.storage_hash ?? '',
+    reportHash:  row.report_hash ?? '',
+    txHash:      row.tx_hash || undefined,
+    validation: {
+      quality: {
+        score:     vr?.quality?.score     ?? row.validation_score ?? 0,
+        issues:    Array.isArray(vr?.quality?.issues)    ? vr!.quality!.issues!    : [],
+        strengths: Array.isArray(vr?.quality?.strengths) ? vr!.quality!.strengths! : [],
+      },
+      category: {
+        subcategory: vr?.category?.subcategory ?? '',
+        useCases:    Array.isArray(vr?.category?.useCases) ? vr!.category!.useCases! : [],
+      },
+      duplicate: {
+        similarityScore: vr?.duplicate?.similarityScore ?? 0,
+        originality:     vr?.duplicate?.originality     ?? '',
+        warning:         vr?.duplicate?.warning         ?? '',
+      },
+    },
+  }
+}
+
 // ── Design tokens ──────────────────────────────────────────────────────────
 
 const BADGE: Record<Category, string> = {
@@ -209,12 +261,43 @@ const CONTRACT = '0x4beD50c7AA534629331f7254171Feade83e4D2e9'
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function DatasetPage() {
-  const params  = useParams()
-  const id      = Number(params.id)
-  const dataset = DATASETS.find((d) => d.id === id)
+  const params = useParams()
+  const id     = Number(params.id)
 
-  // Hooks must be declared before any conditional return
+  const [dataset, setDataset]       = useState<DatasetDetail | null>(
+    DATASETS.find((d) => d.id === id) ?? null,
+  )
+  const [loading, setLoading]       = useState(true)
   const [purchaseDone, setPurchaseDone] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('datasets')
+      .select('*')
+      .eq('id', id)
+      .single()
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (data && !error) setDataset(rowToDetail(data as DatasetRow))
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [id])
+
+  if (loading && !dataset) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#FAFAFA]">
+        <div className="flex flex-col items-center gap-3 text-[#9CA3AF]">
+          <svg className="h-6 w-6 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span className="text-sm font-medium">Loading dataset...</span>
+        </div>
+      </main>
+    )
+  }
 
   if (!dataset) {
     return (
@@ -440,9 +523,16 @@ export default function DatasetPage() {
 
                 <HashRow label="Storage Hash" value={dataset.storageHash} />
                 <HashRow label="Report Hash"  value={dataset.reportHash} />
+                {dataset.txHash && (
+                  <HashRow label="Tx Hash" value={dataset.txHash} />
+                )}
 
                 <a
-                  href={`https://chainscan-newton.0g.ai/address/${CONTRACT}`}
+                  href={
+                    dataset.txHash
+                      ? `https://chainscan-newton.0g.ai/tx/${dataset.txHash}`
+                      : `https://chainscan-newton.0g.ai/address/${CONTRACT}`
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 text-xs font-semibold text-[#4F46E5] transition-colors hover:text-[#4338CA]"

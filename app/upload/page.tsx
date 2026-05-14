@@ -3,6 +3,11 @@
 import type { ValidationReport } from '@/lib/agents/swarm'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useWriteContract, useConfig, useAccount } from 'wagmi'
+import { waitForTransactionReceipt } from 'wagmi/actions'
+import { parseEther } from 'viem'
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '@/lib/contract'
+import { saveDataset } from '@/lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -142,6 +147,14 @@ export default function UploadPage() {
   const [score, setScore]             = useState(0)
   const [storageHash, setStorageHash] = useState('')
   const [report, setReport]           = useState<ValidationReport | null>(null)
+  const [walletMessage, setWalletMessage] = useState('')
+  const [txHash, setTxHash]               = useState('')
+  const [savedId, setSavedId]             = useState<number | null>(null)
+
+  // ── Wagmi hooks ───────────────────────────────────────────────────────────
+  const config = useConfig()
+  const { writeContractAsync } = useWriteContract()
+  const { address } = useAccount()
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -161,7 +174,8 @@ export default function UploadPage() {
     // ── Stage 1: Upload to 0G (simulated) ────────────────────────────────
     setStages(['active', 'pending', 'pending', 'pending'])
     await sleep(2000)
-    setStorageHash('0x' + mockHash())
+    const localStorageHash = '0x' + mockHash()
+    setStorageHash(localStorageHash)
     setStages(['done', 'pending', 'pending', 'pending'])
     await sleep(350)
 
@@ -203,9 +217,33 @@ export default function UploadPage() {
     setStages(['done', 'done', 'pending', 'pending'])
     await sleep(350)
 
-    // ── Stage 3: Chain proof (simulated) ─────────────────────────────────
+    // ── Stage 3: List dataset on-chain (real wallet tx) ──────────────────
     setStages(['done', 'done', 'active', 'pending'])
-    await sleep(2000)
+    setWalletMessage('Sign the transaction in your wallet...')
+
+    let localTxHash = ''
+    try {
+      const metadataURI = JSON.stringify({ name, description, timestamp: Date.now() })
+      const priceWei    = parseEther(price && !isNaN(Number(price)) ? price : '0')
+
+      const hash = await writeContractAsync({
+        address:      CONTRACT_ADDRESS,
+        abi:          CONTRACT_ABI,
+        functionName: 'listDataset',
+        args:         [localStorageHash, priceWei, metadataURI],
+      })
+
+      localTxHash = hash
+      setTxHash(hash)
+      setWalletMessage('Waiting for confirmation...')
+      await waitForTransactionReceipt(config, { hash })
+      setWalletMessage('Transaction confirmed!')
+    } catch (err) {
+      console.error('[Upload] Contract write failed:', err)
+      setWalletMessage('Transaction failed — continuing without on-chain record')
+      await sleep(1500)
+    }
+
     setStages(['done', 'done', 'done', 'pending'])
     await sleep(350)
 
@@ -213,12 +251,38 @@ export default function UploadPage() {
     setStages(['done', 'done', 'done', 'active'])
     await sleep(500)
 
+    const finalScore = apiResult?.overallScore ?? Math.floor(Math.random() * 14) + 84
     if (apiResult) {
       setReport(apiResult)
       setScore(apiResult.overallScore)
     } else {
-      setScore(Math.floor(Math.random() * 14) + 84)
+      setScore(finalScore)
     }
+
+    // Save to Supabase — get back the real dataset ID for the redirect
+    const dataToSave = {
+      name,
+      description,
+      price,
+      storage_hash:        localStorageHash,
+      report_hash:         apiResult?.reportHash ?? '',
+      validation_score:    finalScore,
+      category:            apiResult?.category?.category ?? 'Tabular',
+      tx_hash:             localTxHash,
+      contributor_address: address ?? '',
+      validation_report:   apiResult ?? undefined,
+    }
+    console.log('[Upload] Saving to Supabase...', dataToSave)
+
+    let newId: number | null = null
+    try {
+      newId = await saveDataset(dataToSave)
+      console.log('[Upload] Saved dataset ID:', newId)
+    } catch (err) {
+      console.error('[Upload] saveDataset threw:', err)
+    }
+
+    if (newId) setSavedId(newId)
 
     setStep('success')
   }
@@ -234,6 +298,9 @@ export default function UploadPage() {
     setScore(0)
     setStorageHash('')
     setReport(null)
+    setWalletMessage('')
+    setTxHash('')
+    setSavedId(null)
   }
 
   const canSubmit = name.trim().length > 0 && file !== null
@@ -407,7 +474,7 @@ export default function UploadPage() {
 
           {/* ── STEP 2: Processing ───────────────────────────────────────── */}
           {step === 'processing' && (
-            <ProcessingScreen stages={stages} agents={agents} />
+            <ProcessingScreen stages={stages} agents={agents} walletMessage={walletMessage} />
           )}
 
           {/* ── STEP 3: Success ──────────────────────────────────────────── */}
@@ -416,6 +483,8 @@ export default function UploadPage() {
               score={score}
               name={name}
               storageHash={storageHash}
+              txHash={txHash}
+              savedId={savedId}
               report={report}
               onReset={handleReset}
             />
@@ -439,9 +508,11 @@ const STAGE_CONFIG: { Icon: React.ComponentType<SvgProps>; label: string }[] = [
 function ProcessingScreen({
   stages,
   agents,
+  walletMessage,
 }: {
   stages: StageStatus[]
   agents: AgentStatus[]
+  walletMessage: string
 }) {
   return (
     <div className="fade-up">
@@ -487,6 +558,17 @@ function ProcessingScreen({
                 }`}>
                   {label}
                 </span>
+
+                {i === 2 && active && walletMessage && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#4F46E5] animate-pulse" />
+                    <span className="text-xs font-medium text-[#4F46E5]">{walletMessage}</span>
+                  </div>
+                )}
+
+                {i === 2 && done && walletMessage && (
+                  <p className="mt-2 text-xs text-[#16A34A]">{walletMessage}</p>
+                )}
 
                 {i === 1 && status !== 'pending' && (
                   <div className="mt-5 grid grid-cols-3 gap-3">
@@ -576,12 +658,16 @@ function SuccessScreen({
   score,
   name,
   storageHash,
+  txHash,
+  savedId,
   report,
   onReset,
 }: {
   score: number
   name: string
   storageHash: string
+  txHash: string
+  savedId: number | null
   report: ValidationReport | null
   onReset: () => void
 }) {
@@ -727,18 +813,27 @@ function SuccessScreen({
           <MetaRow label="Report Hash">
             <span className="font-mono text-xs text-[#0A0A0A]">{truncHash(reportHash)}</span>
           </MetaRow>
+          {txHash && (
+            <MetaRow label="Tx Hash">
+              <span className="font-mono text-xs text-[#0A0A0A]">{truncHash(txHash)}</span>
+            </MetaRow>
+          )}
           <MetaRow label="Network">
-            <span className="text-xs font-semibold text-[#4F46E5]">0G Newton Testnet</span>
+            <span className="text-xs font-semibold text-[#4F46E5]">0G Galileo Testnet</span>
           </MetaRow>
           <MetaRow label="0G Explorer">
-            <a
-              href={`https://chainscan-newton.0g.ai/tx/${storageHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-semibold text-[#4F46E5] hover:underline"
-            >
-              View on-chain →
-            </a>
+            {txHash ? (
+              <a
+                href={`https://chainscan-newton.0g.ai/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-[#4F46E5] hover:underline"
+              >
+                View transaction →
+              </a>
+            ) : (
+              <span className="text-xs text-[#9CA3AF]">No transaction recorded</span>
+            )}
           </MetaRow>
         </div>
       </div>
@@ -746,7 +841,7 @@ function SuccessScreen({
       {/* Actions */}
       <div className="flex flex-col gap-3 sm:flex-row">
         <Link
-          href="/dataset/1"
+          href={`/dataset/${savedId ?? 1}`}
           className="flex h-12 flex-1 items-center justify-center rounded-full bg-[#4F46E5] text-sm font-semibold text-white transition-colors hover:bg-[#4338CA]"
         >
           View Dataset

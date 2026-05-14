@@ -9,8 +9,8 @@ import { defineChain, http } from 'viem'
 import { useState } from 'react'
 
 const zgNewtonTestnet = defineChain({
-  id: 16600,
-  name: '0G Newton Testnet',
+  id: 16602,
+  name: '0G Galileo Testnet',
   nativeCurrency: { name: 'OG', symbol: 'OG', decimals: 18 },
   rpcUrls: {
     default: { http: ['https://evmrpc-testnet.0g.ai'] },
@@ -39,7 +39,7 @@ const wagmiConfig = getDefaultConfig({
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? 'dataswarm',
   chains: [zgNewtonTestnet, zgMainnet],
   transports: {
-    [zgNewtonTestnet.id]: http('https://evmrpc-testnet.0g.ai'),
+    [zgNewtonTestnet.id]: http('https://evmrpc-testnet.0g.ai'),  // chainId 16602
     [zgMainnet.id]: http('https://evmrpc-mainnet.0g.ai'),
   },
   ssr: true,
