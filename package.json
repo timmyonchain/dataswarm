@@ -2,11 +2,15 @@
   "name": "dataswarm",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "compile": "hardhat compile",
+    "deploy:testnet": "hardhat run scripts/deploy.cjs --network 0g-testnet",
+    "test:contracts": "hardhat test"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.1.7",
@@ -20,13 +24,18 @@
     "wagmi": "^2.12.7"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^16.6.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "hardhat": "^2.22.0",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.0",
     "typescript": "^5"
   }
 }
