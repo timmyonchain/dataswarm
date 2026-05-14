@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import type { DatasetRow } from '@/lib/supabase'
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 
@@ -62,42 +64,75 @@ const STEPS = [
   },
 ]
 
-const DATASETS = [
+const MOCK_DATASETS = [
   {
-    name: 'Medical Imaging Classification v2',
-    category: 'Healthcare',
-    score: 97,
-    price: '142 OG',
+    id:          null as number | null,
+    name:        'Medical Imaging Classification v2',
+    category:    'Healthcare',
+    score:       97,
+    price:       '142 OG',
     contributor: '0x4a2f…8e91',
-    downloads: 1204,
+    downloads:   1204,
   },
   {
-    name: 'Multilingual Code Comments Dataset',
-    category: 'Code',
-    score: 94,
-    price: '88 OG',
+    id:          null as number | null,
+    name:        'Multilingual Code Comments Dataset',
+    category:    'Code',
+    score:       94,
+    price:       '88 OG',
     contributor: '0x7b1c…3d44',
-    downloads: 892,
+    downloads:   892,
   },
   {
-    name: 'Financial Sentiment Analysis Corpus',
-    category: 'Finance',
-    score: 96,
-    price: '215 OG',
+    id:          null as number | null,
+    name:        'Financial Sentiment Analysis Corpus',
+    category:    'Finance',
+    score:       96,
+    price:       '215 OG',
     contributor: '0x9f3e…c712',
-    downloads: 2103,
+    downloads:   2103,
   },
 ]
 
 const BADGE: Record<string, string> = {
-  Healthcare: 'bg-[#ECFDF5] text-[#065F46]',
-  Code:       'bg-[#EEF2FF] text-[#3730A3]',
-  Finance:    'bg-[#FFFBEB] text-[#92400E]',
+  Healthcare:        'bg-[#ECFDF5] text-[#065F46]',
+  Code:              'bg-[#EEF2FF] text-[#3730A3]',
+  Finance:           'bg-[#FFFBEB] text-[#92400E]',
+  NLP:               'bg-[#EEF2FF] text-[#4338CA]',
+  'Computer Vision': 'bg-[#F0FDF4] text-[#15803D]',
+  Tabular:           'bg-[#FFFBEB] text-[#B45309]',
+  Audio:             'bg-[#FAF5FF] text-[#7C3AED]',
+  Multimodal:        'bg-[#FFF1F2] text-[#BE185D]',
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-export default function Home() {
+export default async function Home() {
+  // Fetch 3 most recent real datasets; fall back to mock if empty
+  const { data: liveData } = await supabase
+    .from('datasets')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(3)
+
+  const featuredDatasets =
+    liveData && liveData.length > 0
+      ? (liveData as DatasetRow[]).map((row) => {
+          const addr = row.contributor_address ?? ''
+          return {
+            id:          row.id as number | null,
+            name:        row.name,
+            category:    row.category || 'Tabular',
+            score:       row.validation_score ?? 0,
+            price:       `${row.price} OG`,
+            contributor: addr.length > 10
+              ? `${addr.slice(0, 6)}…${addr.slice(-4)}`
+              : addr || '0x????…????',
+            downloads:   0,
+          }
+        })
+      : MOCK_DATASETS
+
   return (
     <main className="bg-[#FAFAFA]">
 
@@ -225,14 +260,14 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {DATASETS.map((ds) => (
+            {featuredDatasets.map((ds) => (
               <div
                 key={ds.name}
                 className="flex flex-col rounded-2xl border border-[#E5E5E5] bg-white p-6 transition-all duration-200 hover:border-[#C7D2FE] hover:shadow-md"
               >
                 {/* Card header: badge + score */}
                 <div className="flex items-start justify-between mb-5">
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${BADGE[ds.category]}`}>
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${BADGE[ds.category] ?? 'bg-[#F3F4F6] text-[#6B7280]'}`}>
                     {ds.category}
                   </span>
                   <div className="text-right">
@@ -265,7 +300,7 @@ export default function Home() {
 
                 {/* CTA */}
                 <Link
-                  href="/marketplace"
+                  href={ds.id != null ? `/dataset/${ds.id}` : '/marketplace'}
                   className="flex h-9 w-full items-center justify-center rounded-lg bg-[#4F46E5] text-xs font-semibold text-white transition-colors hover:bg-[#4338CA]"
                 >
                   View Dataset

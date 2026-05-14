@@ -25,4 +25,23 @@ export const CONTRACT_ABI = [
     ],
     outputs: [],
   },
+  {
+    name: 'purchaseDataset',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'datasetId', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    name: 'hasAccess',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'datasetId', type: 'uint256' },
+      { name: 'user',      type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
 ] as const

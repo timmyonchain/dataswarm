@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import type { DatasetRow } from '@/lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -21,7 +23,7 @@ type SortKey  = 'Newest' | 'Highest Score' | 'Lowest Price' | 'Most Popular'
 
 // ── Mock data ──────────────────────────────────────────────────────────────
 
-const DATASETS: Dataset[] = [
+const MOCK_DATASETS: Dataset[] = [
   {
     id: 1, name: 'Twitter Sentiment 2024', category: 'NLP',
     score: 94, price: '2.5', purchases: 47,
@@ -80,16 +82,52 @@ function scoreColor(s: number): string {
   return '#DC2626'
 }
 
+function rowToDataset(row: DatasetRow): Dataset {
+  const cat = CATEGORIES.includes(row.category as Category)
+    ? (row.category as Category)
+    : 'Tabular'
+  const addr = row.contributor_address ?? ''
+  return {
+    id:          row.id,
+    name:        row.name,
+    category:    cat,
+    score:       row.validation_score ?? 0,
+    price:       row.price ?? '0',
+    purchases:   0,
+    contributor: addr.length > 10
+      ? `${addr.slice(0, 6)}...${addr.slice(-4)}`
+      : addr || '0x????...????',
+    description: row.description || 'No description provided.',
+  }
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────
 
 export default function MarketplacePage() {
-  const [search,   setSearch]   = useState('')
-  const [category, setCategory] = useState<Category | 'All'>('All')
-  const [minScore, setMinScore] = useState(0)
-  const [sortBy,   setSortBy]   = useState<SortKey>('Newest')
+  const [search,      setSearch]      = useState('')
+  const [category,    setCategory]    = useState<Category | 'All'>('All')
+  const [minScore,    setMinScore]    = useState(0)
+  const [sortBy,      setSortBy]      = useState<SortKey>('Newest')
+  const [liveRows,    setLiveRows]    = useState<Dataset[]>([])
+  const [liveLoading, setLiveLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('datasets')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setLiveRows((data as DatasetRow[]).map(rowToDataset))
+        }
+        setLiveLoading(false)
+      })
+  }, [])
+
+  const allDatasets = useMemo(() => [...liveRows, ...MOCK_DATASETS], [liveRows])
 
   const filtered = useMemo(() => {
-    let list = [...DATASETS]
+    let list = [...allDatasets]
 
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -112,7 +150,7 @@ export default function MarketplacePage() {
     }
 
     return list
-  }, [search, category, minScore, sortBy])
+  }, [search, category, minScore, sortBy, allDatasets])
 
   const hasFilters =
     search.trim() !== '' || category !== 'All' || minScore > 0 || sortBy !== 'Newest'
@@ -140,10 +178,19 @@ export default function MarketplacePage() {
               </p>
             </div>
             <div className="inline-flex items-center gap-2 self-start rounded-full border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-1.5 sm:self-auto">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#4F46E5]" />
-              <span className="text-xs font-semibold text-[#6B7280]">
-                {filtered.length} dataset{filtered.length !== 1 ? 's' : ''} available
-              </span>
+              {liveLoading ? (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#4F46E5] animate-pulse" />
+                  <span className="text-xs font-semibold text-[#6B7280]">Loading…</span>
+                </>
+              ) : (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#4F46E5]" />
+                  <span className="text-xs font-semibold text-[#6B7280]">
+                    {filtered.length} dataset{filtered.length !== 1 ? 's' : ''} available
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -228,7 +275,7 @@ export default function MarketplacePage() {
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((ds) => (
-              <DatasetCard key={ds.id} dataset={ds} />
+              <DatasetCard key={`${ds.id}-${ds.name}`} dataset={ds} />
             ))}
           </div>
         )}

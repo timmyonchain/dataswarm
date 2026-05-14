@@ -3,12 +3,18 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { useWriteContract, useReadContract, useConfig, useAccount } from 'wagmi'
+import { waitForTransactionReceipt } from 'wagmi/actions'
+import { parseEther } from 'viem'
 import { supabase } from '@/lib/supabase'
 import type { DatasetRow } from '@/lib/supabase'
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '@/lib/contract'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type Category = 'NLP' | 'Computer Vision' | 'Tabular' | 'Audio' | 'Multimodal'
+type PurchaseState = 'idle' | 'wallet' | 'confirming' | 'done' | 'error'
+type DownloadState = 'idle' | 'downloading' | 'done' | 'error'
 
 interface DatasetDetail {
   id:          number
@@ -23,6 +29,7 @@ interface DatasetDetail {
   storageHash: string
   reportHash:  string
   txHash?:     string
+  isLive?:     boolean
   validation: {
     quality:   { score: number; issues: string[]; strengths: string[] }
     category:  { subcategory: string; useCases: string[] }
@@ -221,6 +228,7 @@ function rowToDetail(row: DatasetRow): DatasetDetail {
     storageHash: row.storage_hash ?? '',
     reportHash:  row.report_hash ?? '',
     txHash:      row.tx_hash || undefined,
+    isLive:      true,
     validation: {
       quality: {
         score:     vr?.quality?.score     ?? row.validation_score ?? 0,
@@ -256,7 +264,7 @@ function scoreColor(s: number) {
   return '#DC2626'
 }
 
-const CONTRACT = '0x4beD50c7AA534629331f7254171Feade83e4D2e9'
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as const
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
@@ -264,11 +272,34 @@ export default function DatasetPage() {
   const params = useParams()
   const id     = Number(params.id)
 
-  const [dataset, setDataset]       = useState<DatasetDetail | null>(
+  const [dataset, setDataset] = useState<DatasetDetail | null>(
     DATASETS.find((d) => d.id === id) ?? null,
   )
-  const [loading, setLoading]       = useState(true)
-  const [purchaseDone, setPurchaseDone] = useState(false)
+  const [loading,       setLoading]       = useState(true)
+  // Mock datasets path
+  const [purchaseDone,  setPurchaseDone]  = useState(false)
+  // Live datasets path
+  const [purchaseState, setPurchaseState] = useState<PurchaseState>('idle')
+  const [downloadState, setDownloadState] = useState<DownloadState>('idle')
+
+  // Wagmi hooks — called unconditionally
+  const { address }            = useAccount()
+  const config                 = useConfig()
+  const { writeContractAsync } = useWriteContract()
+
+  const isLive        = dataset?.isLive ?? false
+  const datasetIdBig  = BigInt(dataset?.id ?? 0)
+  const userAddr      = address ?? ZERO_ADDR
+
+  const { data: canAccess } = useReadContract({
+    address:      CONTRACT_ADDRESS,
+    abi:          CONTRACT_ABI,
+    functionName: 'hasAccess',
+    args:         [datasetIdBig, userAddr],
+    query:        { enabled: isLive && !!address },
+  })
+
+  const hasFullAccess = purchaseState === 'done' || !!canAccess
 
   useEffect(() => {
     let cancelled = false
@@ -284,6 +315,60 @@ export default function DatasetPage() {
       })
     return () => { cancelled = true }
   }, [id])
+
+  // ── Handlers ────────────────────────────────────────────────────────────
+
+  async function handlePurchase() {
+    if (!dataset) return
+
+    // Mock path
+    if (!dataset.isLive) {
+      setPurchaseDone(true)
+      return
+    }
+
+    setPurchaseState('wallet')
+    try {
+      const hash = await writeContractAsync({
+        address:      CONTRACT_ADDRESS,
+        abi:          CONTRACT_ABI,
+        functionName: 'purchaseDataset',
+        args:         [datasetIdBig],
+        value:        parseEther(dataset.price),
+      })
+      setPurchaseState('confirming')
+      await waitForTransactionReceipt(config, { hash })
+      setPurchaseState('done')
+    } catch (err) {
+      console.error('[Purchase] Failed:', err)
+      setPurchaseState('error')
+    }
+  }
+
+  async function handleDownload() {
+    if (!dataset?.storageHash) return
+    setDownloadState('downloading')
+    try {
+      const params = new URLSearchParams({ hash: dataset.storageHash, name: dataset.name })
+      const res = await fetch(`/api/download?${params}`)
+      if (!res.ok) throw new Error(`Server returned ${res.status}`)
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = dataset.name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      setDownloadState('done')
+    } catch (err) {
+      console.error('[Download] Failed:', err)
+      setDownloadState('error')
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────
 
   if (loading && !dataset) {
     return (
@@ -314,6 +399,9 @@ export default function DatasetPage() {
 
   const { validation: v } = dataset
   const color = scoreColor(dataset.score)
+
+  // Derived purchase/download button states
+  const showPurchased = dataset.isLive ? hasFullAccess : purchaseDone
 
   return (
     <main className="min-h-screen bg-[#FAFAFA]">
@@ -490,26 +578,86 @@ export default function DatasetPage() {
                 </div>
               </div>
 
-              {/* CTAs */}
+              {/* ── CTAs ────────────────────────────────────────────── */}
               <div className="px-6 pb-5 space-y-2.5">
-                {purchaseDone ? (
+
+                {/* Purchase button */}
+                {showPurchased ? (
                   <div className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#DCFCE7] text-sm font-semibold text-[#15803D]">
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 6 9 17l-5-5" />
                     </svg>
-                    Access Granted
+                    Access Granted!
                   </div>
+                ) : purchaseState === 'wallet' ? (
+                  <button disabled className="flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full bg-[#4F46E5]/60 text-sm font-semibold text-white">
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Confirm in wallet...
+                  </button>
+                ) : purchaseState === 'confirming' ? (
+                  <button disabled className="flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full bg-[#4F46E5]/60 text-sm font-semibold text-white">
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Waiting for confirmation...
+                  </button>
+                ) : purchaseState === 'error' ? (
+                  <button
+                    onClick={handlePurchase}
+                    className="flex h-11 w-full items-center justify-center rounded-full bg-[#FEF2F2] text-sm font-semibold text-[#DC2626] transition-colors hover:bg-[#FEE2E2]"
+                  >
+                    Purchase Failed — Retry
+                  </button>
                 ) : (
                   <button
-                    onClick={() => setPurchaseDone(true)}
+                    onClick={handlePurchase}
                     className="flex h-11 w-full items-center justify-center rounded-full bg-[#4F46E5] text-sm font-semibold text-white transition-colors hover:bg-[#4338CA]"
                   >
-                    Purchase Access
+                    Purchase Access · {dataset.price} OG
                   </button>
                 )}
-                <button className="flex h-11 w-full items-center justify-center rounded-full border border-[#E5E5E5] text-sm font-medium text-[#6B7280] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5]">
-                  {purchaseDone ? 'Download Dataset' : 'Already purchased? Download'}
-                </button>
+
+                {/* Download button */}
+                {dataset.isLive ? (
+                  hasFullAccess ? (
+                    <button
+                      onClick={handleDownload}
+                      disabled={downloadState === 'downloading'}
+                      className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#4F46E5] text-sm font-medium text-[#4F46E5] transition-colors hover:bg-[#EEF2FF] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {downloadState === 'downloading' ? (
+                        <>
+                          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Downloading...
+                        </>
+                      ) : downloadState === 'done' ? (
+                        'Downloaded ✓'
+                      ) : downloadState === 'error' ? (
+                        'Download Failed — Retry'
+                      ) : (
+                        'Download Dataset'
+                      )}
+                    </button>
+                  ) : (
+                    <div className="flex h-11 w-full items-center justify-center rounded-full border border-[#E5E5E5] text-sm font-medium text-[#9CA3AF]">
+                      {!address ? 'Connect wallet to purchase' : 'Purchase required to download'}
+                    </div>
+                  )
+                ) : (
+                  // Mock dataset path
+                  <button
+                    className="flex h-11 w-full items-center justify-center rounded-full border border-[#E5E5E5] text-sm font-medium text-[#6B7280] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5]"
+                  >
+                    {purchaseDone ? 'Download Dataset' : 'Already purchased? Download'}
+                  </button>
+                )}
               </div>
 
               {/* Divider */}
@@ -531,7 +679,7 @@ export default function DatasetPage() {
                   href={
                     dataset.txHash
                       ? `https://chainscan-newton.0g.ai/tx/${dataset.txHash}`
-                      : `https://chainscan-newton.0g.ai/address/${CONTRACT}`
+                      : `https://chainscan-newton.0g.ai/address/${CONTRACT_ADDRESS}`
                   }
                   target="_blank"
                   rel="noopener noreferrer"
@@ -597,7 +745,7 @@ function ScoreBar({ value, color }: { value: number; color: string }) {
 
 function HashRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false)
-  const display = value.slice(0, 10) + '…' + value.slice(-8)
+  const display = value.length > 18 ? value.slice(0, 10) + '…' + value.slice(-8) : value
 
   const copy = async () => {
     await navigator.clipboard.writeText(value)
