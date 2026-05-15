@@ -8,25 +8,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defineChain, http } from 'viem'
 import { useState } from 'react'
 
-const zgNewtonTestnet = defineChain({
-  id: 16602,
-  name: '0G Galileo Testnet',
-  nativeCurrency: { name: 'OG', symbol: 'OG', decimals: 18 },
-  rpcUrls: {
-    default: { http: ['https://evmrpc-testnet.0g.ai'] },
-  },
-  blockExplorers: {
-    default: { name: '0G Explorer', url: 'https://chainscan-newton.0g.ai' },
-  },
-  testnet: true,
-})
-
 const zgMainnet = defineChain({
-  id: 16888,
+  id: 16661,
   name: '0G Mainnet',
   nativeCurrency: { name: 'OG', symbol: 'OG', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://evmrpc-mainnet.0g.ai'] },
+    default: { http: ['https://rpc.ankr.com/0g_mainnet_evm'] },
   },
   blockExplorers: {
     default: { name: '0G Explorer', url: 'https://chainscan.0g.ai' },
@@ -34,13 +21,26 @@ const zgMainnet = defineChain({
   testnet: false,
 })
 
+const zgTestnet = defineChain({
+  id: 16602,
+  name: '0G Galileo Testnet',
+  nativeCurrency: { name: 'OG', symbol: 'OG', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://evmrpc-testnet.0g.ai'] },
+  },
+  blockExplorers: {
+    default: { name: '0G Explorer', url: 'https://chainscan-galileo.0g.ai' },
+  },
+  testnet: true,
+})
+
 const wagmiConfig = getDefaultConfig({
   appName: 'DataSwarm',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? 'dataswarm',
-  chains: [zgNewtonTestnet, zgMainnet],
+  chains: [zgMainnet, zgTestnet],
   transports: {
-    [zgNewtonTestnet.id]: http('https://evmrpc-testnet.0g.ai'),  // chainId 16602
-    [zgMainnet.id]: http('https://evmrpc-mainnet.0g.ai'),
+    [zgMainnet.id]: http('https://rpc.ankr.com/0g_mainnet_evm'),
+    [zgTestnet.id]: http('https://evmrpc-testnet.0g.ai'),
   },
   ssr: true,
 })

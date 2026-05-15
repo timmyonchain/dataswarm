@@ -884,7 +884,7 @@ function SuccessScreen({
           <MetaRow label="0G Explorer">
             {txHash ? (
               <a
-                href={`https://chainscan-newton.0g.ai/tx/${txHash}`}
+                href={`https://chainscan.0g.ai/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-semibold text-[#4F46E5] hover:underline"

@@ -2,7 +2,7 @@ require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config({ path: ".env.local" });
 require("dotenv").config();
 
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 
 /** @type {import('hardhat/config').HardhatUserConfig} */
 module.exports = {
@@ -20,8 +20,14 @@ module.exports = {
     "0g-testnet": {
       url: "https://evmrpc-testnet.0g.ai",
       chainId: 16602,
-      // Add PRIVATE_KEY=<your-key> to .env.local before deploying
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+    },
+    "0g-mainnet": {
+      url: "https://rpc.ankr.com/0g_mainnet_evm",
+      chainId: 16661,
+      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+      timeout: 120000,
+      httpHeaders: { "Content-Type": "application/json" },
     },
   },
 

@@ -3,7 +3,7 @@
 > **OpenSea for AI training data — where agent swarms validate every dataset on 0G.**
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-dataswarm.vercel.app-4F46E5?style=for-the-badge)](https://dataswarm.vercel.app)
-[![Contract](https://img.shields.io/badge/Contract-0x4beD5...D2e9-0ea5e9?style=for-the-badge)](https://chainscan-galileo.0g.ai/address/0x4beD50c7AA534629331f7254171Feade83e4D2e9)
+[![Contract](https://img.shields.io/badge/Contract-0x4beD5...D2e9-0ea5e9?style=for-the-badge)](https://chainscan.0g.ai/address/0x4beD50c7AA534629331f7254171Feade83e4D2e9)
 [![Track](https://img.shields.io/badge/Track%203-Agentic%20Economy-8b5cf6?style=for-the-badge)](#)
 
 ---
@@ -166,7 +166,7 @@ The weighted score and SHA-256 report hash are both written to 0G Chain via `sub
 
 **Address:** `0x4beD50c7AA534629331f7254171Feade83e4D2e9`  
 **Network:** 0G Galileo Testnet (chainId 16602)  
-**Explorer:** [chainscan-galileo.0g.ai](https://chainscan-galileo.0g.ai/address/0x4beD50c7AA534629331f7254171Feade83e4D2e9)
+**Explorer:** [chainscan.0g.ai](https://chainscan.0g.ai/address/0x4beD50c7AA534629331f7254171Feade83e4D2e9)
 
 ```solidity
 // List a new dataset — returns the new dataset ID
@@ -352,7 +352,7 @@ Stage 4 — Metadata Index
 
 - **Live demo:** https://dataswarm.vercel.app
 - **GitHub:** https://github.com/timmyonchain/dataswarm
-- **Contract explorer:** https://chainscan-galileo.0g.ai/address/0x4beD50c7AA534629331f7254171Feade83e4D2e9
+- **Contract explorer:** https://chainscan.0g.ai/address/0x4beD50c7AA534629331f7254171Feade83e4D2e9
 - **0G Testnet faucet:** https://faucet.0g.ai
 
 ---

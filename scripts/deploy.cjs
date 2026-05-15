@@ -1,26 +1,23 @@
+require("dotenv").config({ path: ".env.local" });
 require("dotenv").config();
 const hre = require("hardhat");
-const { ethers } = require("ethers");
 
 async function main() {
-  const provider = new ethers.JsonRpcProvider("https://evmrpc-testnet.0g.ai");
-  const wallet = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, provider);
+  const [deployer] = await hre.ethers.getSigners();
 
-  console.log("Deploying from:", wallet.address);
+  console.log("Deploying from:", deployer.address);
 
-  const balance = await provider.getBalance(wallet.address);
-  console.log("Balance:", ethers.formatEther(balance), "OG");
+  const balance = await hre.ethers.provider.getBalance(deployer.address);
+  console.log("Balance:", hre.ethers.formatEther(balance), "OG");
 
-  const artifact = require("../artifacts/contracts/DataSwarm.sol/DataSwarm.json");
-  const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, wallet);
-
+  const DataSwarm = await hre.ethers.getContractFactory("DataSwarm");
   console.log("Deploying DataSwarm...");
-  const contract = await factory.deploy();
+  const contract = await DataSwarm.deploy();
   await contract.waitForDeployment();
   const address = await contract.getAddress();
 
   console.log("DataSwarm deployed to:", address);
-  console.log("Explorer: https://chainscan-newton.0g.ai/address/" + address);
+  console.log("Explorer: https://chainscan.0g.ai/address/" + address);
 }
 
 main().catch((error) => {

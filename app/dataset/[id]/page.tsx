@@ -744,8 +744,8 @@ export default function DatasetPage() {
                 <a
                   href={
                     dataset.txHash
-                      ? `https://chainscan-newton.0g.ai/tx/${dataset.txHash}`
-                      : `https://chainscan-newton.0g.ai/address/${CONTRACT_ADDRESS}`
+                      ? `https://chainscan.0g.ai/tx/${dataset.txHash}`
+                      : `https://chainscan.0g.ai/address/${CONTRACT_ADDRESS}`
                   }
                   target="_blank"
                   rel="noopener noreferrer"
