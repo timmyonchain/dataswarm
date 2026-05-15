@@ -105,7 +105,7 @@ On purchase, the download API fetches the file directly from 0G Storage by hash.
 
 ### 0G Chain — On-Chain Registry and Payment Rail
 
-All marketplace state lives in a Solidity contract deployed to the **0G Galileo Testnet** (chainId 16602):
+All marketplace state lives in a Solidity contract deployed to the **0G Aristotle Mainnet** (chainId 16661):
 
 - `listDataset` writes the storage hash, price (in wei), and metadata URI to chain — creating a permanent listing.
 - `submitValidation` anchors the agent swarm's report hash and quality score on-chain, making the validation tamper-proof.
@@ -155,7 +155,7 @@ The weighted score and SHA-256 report hash are both written to 0G Chain via `sub
 | Frontend | Next.js 16.2.6 (App Router), React 19, Tailwind CSS v4 |
 | Wallet | RainbowKit v2, wagmi v2, viem |
 | Agent Swarm | Groq SDK, Llama-3.3-70B-Versatile, parallel `Promise.all` |
-| Blockchain | 0G Galileo Testnet, Solidity ^0.8.20, Hardhat |
+| Blockchain | 0G Aristotle Mainnet (chainId 16661), Solidity ^0.8.20, Hardhat |
 | Decentralized Storage | `@0glabs/0g-ts-sdk` v0.3.3 |
 | Metadata Index | Supabase (Postgres + Row Level Security) |
 | Deployment | Vercel (serverless functions handle agent API + download proxy) |
@@ -165,7 +165,8 @@ The weighted score and SHA-256 report hash are both written to 0G Chain via `sub
 ## Smart Contract
 
 **Address:** `0x4beD50c7AA534629331f7254171Feade83e4D2e9`  
-**Network:** 0G Galileo Testnet (chainId 16602)  
+**Network:** 0G Aristotle Mainnet (chainId 16661)  
+**RPC:** `https://rpc.ankr.com/0g_mainnet_evm`  
 **Explorer:** [chainscan.0g.ai](https://chainscan.0g.ai/address/0x4beD50c7AA534629331f7254171Feade83e4D2e9)
 
 ```solidity
@@ -203,7 +204,7 @@ function getTotalDatasets() external view returns (uint256);
 ### Prerequisites
 
 - Node.js 20+
-- A wallet with 0G testnet tokens — [faucet.0g.ai](https://faucet.0g.ai)
+- A wallet with OG tokens (0G Aristotle Mainnet)
 - A [Groq API key](https://console.groq.com) (free tier is sufficient)
 - A [Supabase](https://supabase.com) project
 
@@ -222,10 +223,11 @@ Create `.env.local` in the project root:
 ```env
 # 0G Chain
 NEXT_PUBLIC_CONTRACT_ADDRESS=0x4beD50c7AA534629331f7254171Feade83e4D2e9
+NEXT_PUBLIC_CHAIN_ID=16661
 
 # 0G Storage
-NEXT_PUBLIC_0G_STORAGE_RPC=https://evmrpc-testnet.0g.ai
-NEXT_PUBLIC_0G_INDEXER_RPC=https://indexer-storage-testnet-standard.0g.ai
+NEXT_PUBLIC_0G_STORAGE_RPC=https://rpc.ankr.com/0g_mainnet_evm
+NEXT_PUBLIC_0G_INDEXER_RPC=https://indexer-storage-mainnet-standard.0g.ai
 
 # WalletConnect (get one free at cloud.walletconnect.com)
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
@@ -276,7 +278,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```bash
 npm run compile
-npm run deploy:testnet
+npm run deploy:mainnet
 ```
 
 Update `NEXT_PUBLIC_CONTRACT_ADDRESS` with your new address.
@@ -341,7 +343,6 @@ Stage 4 — Metadata Index
 | **Gated download delivery** | Decrypt and stream files only after on-chain `hasAccess` is confirmed for the buyer |
 | **Agent expansion** | Add a Bias Auditor (demographic representation) and a License Checker (detect restricted or copyrighted content) |
 | **Reputation system** | Aggregate contributor scores across all their datasets, stored on-chain |
-| **0G Mainnet** | Migrate contract and storage to 0G mainnet at launch |
 | **Dataset versioning** | Contributors can push updates while preserving all prior version hashes |
 | **Bulk purchase API** | Let AI training pipelines purchase and stream datasets programmatically via API key |
 | **Decentralized validation** | Replace the owner key on `submitValidation` with a multi-sig or on-chain validator set |
@@ -353,7 +354,7 @@ Stage 4 — Metadata Index
 - **Live demo:** https://dataswarm.vercel.app
 - **GitHub:** https://github.com/timmyonchain/dataswarm
 - **Contract explorer:** https://chainscan.0g.ai/address/0x4beD50c7AA534629331f7254171Feade83e4D2e9
-- **0G Testnet faucet:** https://faucet.0g.ai
+- **RPC:** https://rpc.ankr.com/0g_mainnet_evm
 
 ---
 
