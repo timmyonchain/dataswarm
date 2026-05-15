@@ -8,17 +8,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { defineChain, http } from 'viem'
 import { useState } from 'react'
 
-const zgMainnet = defineChain({
+const zeroGMainnet = defineChain({
   id: 16661,
   name: '0G Mainnet',
-  nativeCurrency: { name: 'OG', symbol: 'OG', decimals: 18 },
+  nativeCurrency: {
+    decimals: 18,
+    name: '0G',
+    symbol: 'OG',
+  },
   rpcUrls: {
-    default: { http: ['https://rpc.ankr.com/0g_mainnet_evm'] },
+    default: {
+      http: ['https://rpc.ankr.com/0g_mainnet_evm'],
+    },
   },
   blockExplorers: {
-    default: { name: '0G Explorer', url: 'https://chainscan.0g.ai' },
+    default: {
+      name: '0G ChainScan',
+      url: 'https://chainscan.0g.ai',
+    },
   },
-  testnet: false,
 })
 
 const zgTestnet = defineChain({
@@ -37,9 +45,9 @@ const zgTestnet = defineChain({
 const wagmiConfig = getDefaultConfig({
   appName: 'DataSwarm',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? 'dataswarm',
-  chains: [zgMainnet, zgTestnet],
+  chains: [zeroGMainnet, zgTestnet],
   transports: {
-    [zgMainnet.id]: http('https://rpc.ankr.com/0g_mainnet_evm'),
+    [zeroGMainnet.id]: http('https://rpc.ankr.com/0g_mainnet_evm'),
     [zgTestnet.id]: http('https://evmrpc-testnet.0g.ai'),
   },
   ssr: true,
