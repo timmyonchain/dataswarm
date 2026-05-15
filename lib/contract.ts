@@ -44,4 +44,38 @@ export const CONTRACT_ABI = [
     ],
     outputs: [{ name: '', type: 'bool' }],
   },
+  {
+    name: 'getTotalDatasets',
+    type: 'function',
+    stateMutability: 'view',
+    inputs:  [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'getDataset',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'datasetId', type: 'uint256' },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'id',                   type: 'uint256' },
+          { name: 'storageHash',          type: 'string'  },
+          { name: 'metadataURI',          type: 'string'  },
+          { name: 'contributor',          type: 'address' },
+          { name: 'price',                type: 'uint256' },
+          { name: 'validationScore',      type: 'uint8'   },
+          { name: 'validationReportHash', type: 'string'  },
+          { name: 'isValidated',          type: 'bool'    },
+          { name: 'totalPurchases',       type: 'uint256' },
+          { name: 'earnings',             type: 'uint256' },
+          { name: 'createdAt',            type: 'uint256' },
+        ],
+      },
+    ],
+  },
 ] as const

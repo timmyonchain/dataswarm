@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DataSwarm",
   description: "Web3 AI training data marketplace on 0G blockchain",
+  icons: {
+    icon:     '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple:    '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

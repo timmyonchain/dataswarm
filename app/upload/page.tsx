@@ -4,7 +4,7 @@ import type { ValidationReport } from '@/lib/agents/swarm'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useWriteContract, useConfig, useAccount } from 'wagmi'
-import { simulateContract, waitForTransactionReceipt } from 'wagmi/actions'
+import { readContract, waitForTransactionReceipt } from 'wagmi/actions'
 import { parseEther } from 'viem'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '@/lib/contract'
 import { saveDataset } from '@/lib/supabase'
@@ -224,27 +224,59 @@ export default function UploadPage() {
     let localTxHash    = ''
     let localOnchainId: number | null = null
     try {
+      console.log('[Stage3] Starting...')
       const metadataURI = JSON.stringify({ name, description, timestamp: Date.now() })
       const priceWei    = parseEther(price && !isNaN(Number(price)) ? price : '0')
 
-      // Simulate first — captures the uint256 ID the contract will return
-      const { request, result } = await simulateContract(config, {
+      // Step 1: read current count — new dataset will be idBefore + 1
+      const totalBefore = await readContract(config, {
+        address:      CONTRACT_ADDRESS,
+        abi:          CONTRACT_ABI,
+        functionName: 'getTotalDatasets',
+      })
+      console.log('[Stage3] getTotalDatasets result:', totalBefore?.toString())
+      const idBefore = Number(totalBefore ?? 0n)
+      console.log('[Stage3] idBefore:', idBefore)
+
+      // Step 2: send the transaction
+      console.log('[Stage3] Calling listDataset...')
+      const hash = await writeContractAsync({
         address:      CONTRACT_ADDRESS,
         abi:          CONTRACT_ABI,
         functionName: 'listDataset',
         args:         [localStorageHash, priceWei, metadataURI],
-        account:      address,
       })
-
-      const hash = await writeContractAsync(request)
-      localTxHash    = hash
-      localOnchainId = typeof result === 'bigint' ? Number(result) : null
-      console.log('[Upload] On-chain dataset ID:', localOnchainId)
-
+      localTxHash = hash
       setTxHash(hash)
+      console.log('[Stage3] listDataset hash:', hash)
       setWalletMessage('Waiting for confirmation...')
+
+      // Step 3: wait for the tx to be mined
       await waitForTransactionReceipt(config, { hash })
+      console.log('[Stage3] listDataset confirmed')
       setWalletMessage('Transaction confirmed!')
+
+      // Step 4: ID is idBefore + 1
+      localOnchainId = idBefore + 1
+      console.log('[Stage3] localOnchainId:', localOnchainId)
+
+      // Step 5: Submit validation score on-chain so the dataset is purchaseable
+      setWalletMessage('Writing validation proof to 0G Chain...')
+      console.log('[Stage3] Calling submitValidation...')
+      const validationHash = await writeContractAsync({
+        address:      CONTRACT_ADDRESS,
+        abi:          CONTRACT_ABI,
+        functionName: 'submitValidation',
+        args: [
+          BigInt(localOnchainId),
+          BigInt(Math.round(apiResult?.overallScore ?? 70)),
+          apiResult?.reportHash ?? '0x',
+        ],
+      })
+      console.log('[Stage3] submitValidation hash:', validationHash)
+      await waitForTransactionReceipt(config, { hash: validationHash })
+      console.log('[Stage3] submitValidation confirmed')
+      setWalletMessage('Validation proof recorded!')
     } catch (err) {
       console.error('[Upload] Contract write failed:', err)
       setWalletMessage('Transaction failed — continuing without on-chain record')
@@ -280,6 +312,7 @@ export default function UploadPage() {
       onchain_id:          localOnchainId ?? undefined,
       validation_report:   apiResult ?? undefined,
     }
+    console.log('[Stage3] Saving to Supabase with onchain_id:', localOnchainId)
     console.log('[Upload] Saving to Supabase...', dataToSave)
 
     let newId: number | null = null
@@ -390,9 +423,8 @@ export default function UploadPage() {
                     </label>
                     <div className="relative">
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={price}
                         onChange={(e) => setPrice(e.target.value)}
                         className="w-full rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] pl-4 pr-16 py-2.5 text-sm text-[#0A0A0A] outline-none transition-colors focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/10"

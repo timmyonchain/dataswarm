@@ -282,6 +282,7 @@ export default function DatasetPage() {
   const [purchaseDone,  setPurchaseDone]  = useState(false)
   // Live datasets path
   const [purchaseState, setPurchaseState] = useState<PurchaseState>('idle')
+  const [purchaseError, setPurchaseError] = useState<string | null>(null)
   const [downloadState, setDownloadState] = useState<DownloadState>('idle')
 
   // Wagmi hooks — called unconditionally
@@ -302,16 +303,48 @@ export default function DatasetPage() {
     query:        { enabled: isLive && !!address },
   })
 
+  const { data: contractDataset } = useReadContract({
+    address:      CONTRACT_ADDRESS,
+    abi:          CONTRACT_ABI,
+    functionName: 'getDataset',
+    args:         [datasetIdBig],
+    query:        { enabled: isLive && datasetIdBig > 0n },
+  })
+
+  const { data: totalDatasets } = useReadContract({
+    address:      CONTRACT_ADDRESS,
+    abi:          CONTRACT_ABI,
+    functionName: 'getTotalDatasets',
+  })
+
+  useEffect(() => {
+    console.log('[Contract] Total datasets on-chain:', totalDatasets?.toString())
+    console.log('[Contract] Trying to access ID:', datasetIdBig.toString())
+  }, [totalDatasets, datasetIdBig])
+
+  useEffect(() => {
+    if (!dataset) return
+    console.log('[Dataset Debug]', {
+      datasetIdBig:    datasetIdBig.toString(),
+      contractDataset: contractDataset,
+      onchainId:       dataset.onchainId,
+      supabaseId:      dataset.id,
+      isLive:          dataset.isLive,
+    })
+  }, [contractDataset, datasetIdBig, dataset])
+
   const hasFullAccess = purchaseState === 'done' || !!canAccess
 
   useEffect(() => {
     let cancelled = false
+    console.log('[Supabase fetch] id:', id)
     supabase
       .from('datasets')
       .select('*')
       .eq('id', id)
       .single()
       .then(({ data, error }) => {
+        console.log('[Supabase fetch] result:', data, error)
         if (cancelled) return
         if (data && !error) setDataset(rowToDetail(data as DatasetRow))
         setLoading(false)
@@ -330,14 +363,38 @@ export default function DatasetPage() {
       return
     }
 
+    if (!address) {
+      alert('Please connect your wallet first')
+      return
+    }
+
+    if (!dataset.onchainId) {
+      console.error('[Purchase] No onchain ID - dataset was listed before onchain_id tracking was added')
+      setPurchaseError('no_onchain_id')
+      setPurchaseState('error')
+      return
+    }
+
+    setPurchaseError(null)
     setPurchaseState('wallet')
     try {
+      // Use the exact price stored on-chain; fall back to parseEther only if unavailable
+      const exactPriceWei = (contractDataset as any)?.[4] ?? parseEther(dataset.price)
+      console.log('[Purchase] Final values being sent:')
+      console.log('  contractAddress:', CONTRACT_ADDRESS)
+      console.log('  functionName: purchaseDataset')
+      console.log('  datasetIdBig:', datasetIdBig.toString())
+      console.log('  price string:', dataset.price)
+      console.log('  exactPriceWei:', exactPriceWei.toString())
+      console.log('  userAddress:', address)
+      console.log('[Purchase] On-chain dataset data:', contractDataset)
+
       const hash = await writeContractAsync({
         address:      CONTRACT_ADDRESS,
         abi:          CONTRACT_ABI,
         functionName: 'purchaseDataset',
         args:         [datasetIdBig],
-        value:        parseEther(dataset.price),
+        value:        exactPriceWei,
       })
       setPurchaseState('confirming')
       await waitForTransactionReceipt(config, { hash })
@@ -609,12 +666,18 @@ export default function DatasetPage() {
                     Waiting for confirmation...
                   </button>
                 ) : purchaseState === 'error' ? (
-                  <button
-                    onClick={handlePurchase}
-                    className="flex h-11 w-full items-center justify-center rounded-full bg-[#FEF2F2] text-sm font-semibold text-[#DC2626] transition-colors hover:bg-[#FEE2E2]"
-                  >
-                    Purchase Failed — Retry
-                  </button>
+                  purchaseError === 'no_onchain_id' ? (
+                    <div className="rounded-xl bg-[#FEF2F2] px-4 py-3 text-xs font-medium text-[#DC2626] text-center leading-relaxed">
+                      This dataset was listed before on-chain ID tracking. Please contact the contributor.
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handlePurchase}
+                      className="flex h-11 w-full items-center justify-center rounded-full bg-[#FEF2F2] text-sm font-semibold text-[#DC2626] transition-colors hover:bg-[#FEE2E2]"
+                    >
+                      Purchase Failed — Retry
+                    </button>
+                  )
                 ) : (
                   <button
                     onClick={handlePurchase}
