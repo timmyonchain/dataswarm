@@ -308,7 +308,7 @@ export default function DatasetPage() {
     abi:          CONTRACT_ABI,
     functionName: 'getDataset',
     args:         [datasetIdBig],
-    query:        { enabled: isLive && datasetIdBig > 0n },
+    query:        { enabled: isLive && datasetIdBig > BigInt(0) },
   })
 
   const { data: totalDatasets } = useReadContract({

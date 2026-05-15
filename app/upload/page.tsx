@@ -235,7 +235,7 @@ export default function UploadPage() {
         functionName: 'getTotalDatasets',
       })
       console.log('[Stage3] getTotalDatasets result:', totalBefore?.toString())
-      const idBefore = Number(totalBefore ?? 0n)
+      const idBefore = Number(totalBefore ?? BigInt(0))
       console.log('[Stage3] idBefore:', idBefore)
 
       // Step 2: send the transaction
@@ -269,7 +269,7 @@ export default function UploadPage() {
         functionName: 'submitValidation',
         args: [
           BigInt(localOnchainId),
-          BigInt(Math.round(apiResult?.overallScore ?? 70)),
+          Math.round(apiResult?.overallScore ?? 70) as number,
           apiResult?.reportHash ?? '0x',
         ],
       })
